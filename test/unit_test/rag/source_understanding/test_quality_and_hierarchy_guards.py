@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 from deepdoc.parser.source_observation import (
     DeepDocExtractionSource,
     DeepDocObservation,
@@ -102,6 +104,22 @@ def test_untrusted_inferred_heading_boundary_is_suppressed_instead_of_failing():
     suppressed = result.hierarchy_result.suppression_reasons
     assert len(suppressed) == 1
     assert next(iter(suppressed.values())) == "INFERRED_STRUCTURAL_WITHOUT_CONFIDENT_BOUNDARY"
+
+
+def test_native_navigation_zone_cannot_become_parent_context():
+    parsed = DeepDocParseResult(
+        parser_name="poppler-pdftotext",
+        parser_version="26.09.0",
+        media_type="application/pdf",
+        observations=(
+            replace(_observation(0, "Chapter 2", "HEADING", 2), attributes={"source_zone": "navigation"}),
+            _observation(1, "Chapter 1", "HEADING", 6),
+            _observation(2, "Body text.", "PARAGRAPH", 6),
+        ),
+    )
+    result = SourceAdapterRunner().understand_bytes(b"%PDF-navigation", adapter=DeepDocSourceAdapter(parsed), document_id="native-navigation-test").understanding
+    assert [node.label for node in result.document.context_nodes] == ["Chapter 1"]
+    assert tuple(result.hierarchy_result.suppression_reasons.values()) == ("NAVIGATION_OR_TOC",)
 
 
 def test_text_quality_contributes_to_overall_quality():

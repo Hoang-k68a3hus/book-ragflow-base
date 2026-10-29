@@ -57,6 +57,8 @@ class PdfTextParser:
             raise ValueError(f"native PDF text extraction failed: {detail}") from exc
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError("native PDF text extraction timed out") from exc
+        except OSError as exc:
+            raise RuntimeError(f"cannot run pdftotext: {exc}") from exc
 
         layout = _PdfLayoutParser()
         layout.feed(result.stdout.decode("utf-8"))
@@ -86,9 +88,10 @@ class PdfTextParser:
                 heading = len(short_text) <= 180 and len(lines) <= 3 and _HEADING.match(short_text) is not None
                 page_number_block = _NUMBER.fullmatch(short_text) is not None and (bbox.y1 < height * 0.1 or bbox.y0 > height * 0.9)
                 type_hint = "PAGE_NUMBER" if page_number_block else "HEADING" if heading else "PARAGRAPH"
-                if page_number > 1 and bbox.y1 < height * 0.1 and len(short_text) <= 180 and not page_number_block:
-                    headers[short_text].add(page_number)
-                    header_candidates[len(observations)] = short_text
+                if page_number > 1 and bbox.y1 < height * 0.15 and len(short_text) <= 180 and not page_number_block:
+                    signature = re.sub(r"^\d+\s+|\s+\d+$", "", short_text)
+                    headers[signature].add(page_number)
+                    header_candidates[len(observations)] = signature
                 observations.append(
                     DeepDocObservation(
                         source_id=f"pdf:text:{page_number}:{block_number}",
@@ -117,7 +120,7 @@ class PdfTextParser:
         for index, signature in header_candidates.items():
             if len(headers[signature]) >= 3:
                 observation = observations[index]
-                observations[index] = replace(observation, type_hint="HEADER", attributes={**observation.attributes, "source_zone": "header"})
+                observations[index] = replace(observation, type_hint="HEADER", extraction_source=DeepDocExtractionSource.DERIVED, attributes={**observation.attributes, "source_zone": "header"})
         return DeepDocParseResult(
             parser_name="poppler-pdftotext",
             parser_version=version_match.group(1),

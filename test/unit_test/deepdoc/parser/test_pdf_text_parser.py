@@ -71,3 +71,20 @@ def test_pdf_control_characters_remain_visible_to_quality_checks():
     ):
         parsed = PdfTextParser().extract_source(b"%PDF-control-character")
     assert parsed.observations[1].text == "Na\x01tive text."
+
+
+def test_repeated_running_headers_keep_source_text_but_do_not_become_headings():
+    pages = "".join(
+        f'<page width="600" height="900"><block xMin="50" yMin="70" xMax="550" yMax="90"><line><word>1.1. Topic {number}</word></line></block></page>'
+        for number in range(1, 5)
+    )
+    with (
+        patch.dict("os.environ", {"PDFTOTEXT_EXECUTABLE": "/tools/pdftotext"}),
+        patch("deepdoc.parser.pdf_text_parser.subprocess.run", side_effect=[
+            SimpleNamespace(stderr=b"pdftotext version 26.09.0", stdout=b""),
+            SimpleNamespace(stderr=b"", stdout=f"<doc>{pages}</doc>".encode()),
+        ]),
+    ):
+        parsed = PdfTextParser().extract_source(b"%PDF-running-header")
+    assert [item.text for item in parsed.observations[1:]] == ["1.1. Topic 2", "1.1. Topic 3", "1.1. Topic 4"]
+    assert all(item.type_hint == "HEADER" and item.attributes["source_zone"] == "header" for item in parsed.observations[1:])
