@@ -1,0 +1,324 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "edu-annotation-1.1-pilot — Yêu cầu gán nhãn",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "item_id",
+    "tasks",
+    "target_coverage",
+    "source_metadata",
+    "request",
+    "element_hints"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "edu-annotation-1.1-pilot"
+    },
+    "item_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "tasks": {
+      "type": "array",
+      "items": {
+        "enum": [
+          "MENTIONS",
+          "ROLES",
+          "LINKS"
+        ]
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "target_coverage": {
+      "enum": [
+        "COMPLETE",
+        "PARTIAL"
+      ]
+    },
+    "source_metadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "document_id",
+        "content_hash",
+        "source_revision",
+        "source_name",
+        "subject",
+        "grade",
+        "language"
+      ],
+      "properties": {
+        "document_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "content_hash": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "source_revision": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "source_name": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subject": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "grade": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 6,
+          "maximum": 12
+        },
+        "language": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "target_id",
+        "target_kind",
+        "text",
+        "language",
+        "element_ids",
+        "target_segments",
+        "context_segments",
+        "logical_unit_type",
+        "unit_label",
+        "context_labels",
+        "metadata"
+      ],
+      "properties": {
+        "target_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target_kind": {
+          "enum": [
+            "ELEMENT",
+            "LOGICAL_UNIT"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        },
+        "language": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 2,
+          "maxLength": 64
+        },
+        "element_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "target_segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/segment"
+          },
+          "minItems": 1
+        },
+        "context_segments": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/segment"
+          },
+          "minItems": 0
+        },
+        "logical_unit_type": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "unit_label": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "context_labels": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        },
+        "metadata": {
+          "type": "object",
+          "properties": {
+            "request_truncated": {
+              "type": "boolean"
+            },
+            "truncated_element_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            },
+            "omitted_target_element_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            },
+            "omitted_context_element_ids": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "uniqueItems": true
+            }
+          },
+          "additionalProperties": true
+        }
+      }
+    },
+    "element_hints": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "element_id",
+          "element_type",
+          "source_zone"
+        ],
+        "properties": {
+          "element_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "element_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "source_zone": {
+            "enum": [
+              "body",
+              "header",
+              "footer",
+              "toc",
+              "bibliography",
+              "caption",
+              "unknown"
+            ]
+          }
+        }
+      },
+      "minItems": 0
+    }
+  },
+  "$defs": {
+    "segment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "element_id",
+        "text",
+        "text_view",
+        "element_start",
+        "element_end",
+        "request_start",
+        "request_end"
+      ],
+      "properties": {
+        "element_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        },
+        "text_view": {
+          "enum": [
+            "RAW_TEXT",
+            "NORMALIZED_TEXT"
+          ]
+        },
+        "element_start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "element_end": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "request_start": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "request_end": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "tasks": {
+            "contains": {
+              "const": "LINKS"
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "tasks": {
+            "minItems": 2
+          }
+        }
+      }
+    }
+  ]
+}

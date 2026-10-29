@@ -1,0 +1,311 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "edu-annotation-1.1-pilot — Kết quả LLM",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "item_id",
+    "target_id",
+    "status",
+    "mentions",
+    "roles",
+    "links",
+    "issues"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "edu-annotation-1.1-pilot"
+    },
+    "item_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "target_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "status": {
+      "enum": [
+        "COMPLETE",
+        "PARTIAL",
+        "ABSTAIN"
+      ]
+    },
+    "mentions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "label",
+          "surface",
+          "evidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^m[0-9]{3,}$"
+          },
+          "label": {
+            "enum": [
+              "CONCEPT",
+              "NAMED_PRINCIPLE",
+              "METHOD",
+              "PERSON",
+              "LOCATION",
+              "ORGANIZATION",
+              "WORK",
+              "EVENT",
+              "PRODUCT"
+            ]
+          },
+          "surface": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192
+          },
+          "evidence": {
+            "$ref": "#/$defs/evidence"
+          }
+        }
+      },
+      "minItems": 0
+    },
+    "roles": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "label",
+          "evidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^r[0-9]{3,}$"
+          },
+          "label": {
+            "enum": [
+              "DEFINITION",
+              "THEOREM",
+              "PROOF",
+              "EXAMPLE",
+              "EXERCISE",
+              "QUESTION",
+              "ANSWER",
+              "PROCEDURE",
+              "WARNING",
+              "NOTE"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/evidence"
+            },
+            "minItems": 1
+          }
+        }
+      },
+      "minItems": 0
+    },
+    "links": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "type",
+          "source_id",
+          "target_id",
+          "evidence"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^l[0-9]{3,}$"
+          },
+          "type": {
+            "enum": [
+              "ALIAS_OF",
+              "TRANSLATION_OF",
+              "ANSWER_TO",
+              "EXAMPLE_OF",
+              "PROOF_OF"
+            ]
+          },
+          "source_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[mr][0-9]{3,}$"
+          },
+          "target_id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[mr][0-9]{3,}$"
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/evidence"
+            },
+            "minItems": 1
+          }
+        }
+      },
+      "minItems": 0
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "code",
+          "evidence",
+          "note"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^i[0-9]{3,}$"
+          },
+          "code": {
+            "enum": [
+              "AMBIGUOUS_LABEL",
+              "AMBIGUOUS_ROLE",
+              "UNCERTAIN_BOUNDARY",
+              "OCR_UNREADABLE",
+              "TRUNCATED_TARGET",
+              "CROSS_SEGMENT_MENTION",
+              "MISSING_CONTEXT",
+              "MISSING_MODALITY",
+              "INVALID_INPUT",
+              "OUTPUT_LIMIT"
+            ]
+          },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/evidence"
+            },
+            "minItems": 0
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
+      },
+      "minItems": 0
+    }
+  },
+  "$defs": {
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "element_id",
+        "text_view",
+        "start_char",
+        "end_char",
+        "quoted_text"
+      ],
+      "properties": {
+        "element_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "text_view": {
+          "enum": [
+            "RAW_TEXT",
+            "NORMALIZED_TEXT"
+          ]
+        },
+        "start_char": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "end_char": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "quoted_text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32768
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "COMPLETE"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "issues": {
+            "maxItems": 0
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "enum": [
+              "PARTIAL",
+              "ABSTAIN"
+            ]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "issues": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "ABSTAIN"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "mentions": {
+            "maxItems": 0
+          },
+          "roles": {
+            "maxItems": 0
+          },
+          "links": {
+            "maxItems": 0
+          }
+        }
+      }
+    }
+  ]
+}
