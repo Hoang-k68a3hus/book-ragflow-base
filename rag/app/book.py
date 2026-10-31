@@ -132,7 +132,12 @@ def extract_source(
         if from_page != 0:
             raise ValueError("native-text canonical ingestion requires one whole-document task")
         callback(0.1, "Start native PDF text extraction (OCR disabled).")
-        parsed = PdfTextParser().extract_source(binary if binary is not None else Path(filename).read_bytes())
+        source_bytes = binary if binary is not None else Path(filename).read_bytes()
+        reviewed = parser_config.get("verified_glyph_corrections")
+        if reviewed is None:
+            parsed = PdfTextParser().extract_source(source_bytes)
+        else:
+            parsed = PdfTextParser().extract_source(source_bytes, glyph_corrections=reviewed)
         if to_page >= 0 and to_page < parsed.attributes["page_count"]:
             raise ValueError("native-text canonical ingestion requires every PDF page")
         callback(0.8, "Native PDF text extraction finished (OCR disabled).")

@@ -1,3 +1,4 @@
+from hashlib import sha256
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -88,3 +89,77 @@ def test_repeated_running_headers_keep_source_text_but_do_not_become_headings():
         parsed = PdfTextParser().extract_source(b"%PDF-running-header")
     assert [item.text for item in parsed.observations[1:]] == ["1.1. Topic 2", "1.1. Topic 3", "1.1. Topic 4"]
     assert all(item.type_hint == "HEADER" and item.attributes["source_zone"] == "header" for item in parsed.observations[1:])
+
+
+def test_verified_glyph_correction_preserves_original_and_evidence():
+    source = b"%PDF-known-source"
+    xml = _XML.replace(b"Native", b"6=")
+    correction = {
+        "pdf_sha256": sha256(source).hexdigest(),
+        "page": 1,
+        "block": 1,
+        "original_text": "6= text.",
+        "corrected_text": "≠ text.",
+        "evidence": "visual inspection of page 1 at original resolution",
+    }
+    with (
+        patch.dict("os.environ", {"PDFTOTEXT_EXECUTABLE": "/tools/pdftotext"}),
+        patch("deepdoc.parser.pdf_text_parser.subprocess.run", side_effect=[
+            SimpleNamespace(stderr=b"pdftotext version 26.09.0", stdout=b""),
+            SimpleNamespace(stderr=b"", stdout=xml),
+        ]),
+    ):
+        parsed = PdfTextParser().extract_source(source, glyph_corrections=[correction])
+
+    corrected = parsed.observations[1]
+    assert corrected.text == "≠ text."
+    assert corrected.extraction_source == DeepDocExtractionSource.DERIVED
+    assert corrected.attributes["glyph_provenance"]["original_text"] == "6= text."
+    assert corrected.attributes["glyph_provenance"]["evidence"] == correction["evidence"]
+    assert parsed.attributes["verified_glyph_correction_count"] == 1
+    assert any(d.code == "PDF_VERIFIED_GLYPH_CORRECTION" for d in parsed.diagnostics)
+
+
+def test_suspected_ascii_glyph_is_never_replaced_without_evidence():
+    with (
+        patch.dict("os.environ", {"PDFTOTEXT_EXECUTABLE": "/tools/pdftotext"}),
+        patch("deepdoc.parser.pdf_text_parser.subprocess.run", side_effect=[
+            SimpleNamespace(stderr=b"pdftotext version 26.09.0", stdout=b""),
+            SimpleNamespace(stderr=b"", stdout=_XML.replace(b"Native", b"6=")),
+        ]),
+    ):
+        parsed = PdfTextParser().extract_source(b"%PDF-unreviewed")
+    assert parsed.observations[1].text == "6= text."
+    assert "glyph_provenance" not in parsed.observations[1].attributes
+    assert parsed.attributes["verified_glyph_correction_count"] == 0
+
+
+@pytest.mark.parametrize("bad_field,bad_value", [
+    ("pdf_sha256", "wrong-digest"),
+    ("evidence", ""),
+    ("page", 0),
+    ("block", -1),
+])
+def test_verified_glyph_corrections_reject_invalid_scope(bad_field, bad_value):
+    from deepdoc.parser.pdf_glyph_repair import prepare_verified_glyph_corrections
+    source = b"test"
+    correction = {
+        "pdf_sha256": sha256(source).hexdigest(),
+        "page": 1,
+        "block": 0,
+        "original_text": "6=",
+        "corrected_text": "≠",
+        "evidence": "verified visually",
+    }
+    correction[bad_field] = bad_value
+    with pytest.raises(ValueError):
+        prepare_verified_glyph_corrections(source, [correction])
+
+
+def test_verified_glyph_correction_rejects_stale_poppler_text():
+    from deepdoc.parser.pdf_glyph_repair import apply_verified_glyph_correction
+    with pytest.raises(ValueError, match="must be reviewed again"):
+        apply_verified_glyph_correction(
+            "4=", page=1, block=0,
+            corrections={(1, 0): {"original_text": "6=", "corrected_text": "≠", "evidence": "verified"}},
+        )
