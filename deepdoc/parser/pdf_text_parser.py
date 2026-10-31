@@ -11,9 +11,11 @@ from collections import defaultdict
 from dataclasses import replace
 from html.parser import HTMLParser
 
+from .pdf_glyph_repair import apply_verified_glyph_correction, prepare_verified_glyph_corrections
 from .source_observation import (
     DeepDocBoundingBox,
     DeepDocDiagnostic,
+    DeepDocDiagnosticLevel,
     DeepDocExtractionSource,
     DeepDocObservation,
     DeepDocObservationKind,
@@ -33,7 +35,7 @@ _LEADERS = re.compile(r"(?:\.\s*){5,}")
 class PdfTextParser:
     """Emit the same typed observations as the visual PDF parser from native text."""
 
-    def extract_source(self, data: bytes) -> DeepDocParseResult:
+    def extract_source(self, data: bytes, *, glyph_corrections=None) -> DeepDocParseResult:
         if not isinstance(data, bytes) or not data:
             raise ValueError("native PDF text extraction requires non-empty source bytes")
         executable = os.environ.get("PDFTOTEXT_EXECUTABLE") or shutil.which("pdftotext")
@@ -60,6 +62,8 @@ class PdfTextParser:
         except OSError as exc:
             raise RuntimeError(f"cannot run pdftotext: {exc}") from exc
 
+        correction_index = prepare_verified_glyph_corrections(data, glyph_corrections)
+        applied_corrections: set[tuple[int, int]] = set()
         layout = _PdfLayoutParser()
         layout.feed(result.stdout.decode("utf-8"))
         layout.close()
@@ -83,6 +87,20 @@ class PdfTextParser:
                 text = "\n".join(lines)
                 if not text.strip():
                     continue
+                original_text = text
+                text, glyph_provenance = apply_verified_glyph_correction(
+                    text, page=page_number, block=block_number, corrections=correction_index
+                )
+                if glyph_provenance is not None:
+                    applied_corrections.add((page_number, block_number))
+                    diagnostics.append(
+                        DeepDocDiagnostic(
+                            code="PDF_VERIFIED_GLYPH_CORRECTION",
+                            message=f"Reviewed glyph correction on page {page_number}, block {block_number}",
+                            level=DeepDocDiagnosticLevel.INFO,
+                            metadata={"page": page_number, "block": block_number, "evidence": glyph_provenance["evidence"]},
+                        )
+                    )
                 bbox = DeepDocBoundingBox(*(float(block.attrib[key]) for key in ("xmin", "ymin", "xmax", "ymax")))
                 short_text = " ".join(text.split())
                 heading = len(short_text) <= 180 and len(lines) <= 3 and _HEADING.match(short_text) is not None
@@ -98,10 +116,16 @@ class PdfTextParser:
                         order=len(observations),
                         kind=DeepDocObservationKind.TEXT,
                         text=text,
-                        extraction_source=DeepDocExtractionSource.DERIVED if heading else DeepDocExtractionSource.NATIVE,
+                        extraction_source=DeepDocExtractionSource.DERIVED if heading or glyph_provenance else DeepDocExtractionSource.NATIVE,
                         type_hint=type_hint,
                         locations=(DeepDocSourceLocation(page=page_number, page_width=width, page_height=height, bbox=bbox),),
-                        attributes={"text_extraction_source": "NATIVE", "ocr_used": False, "heading_rule_applied": heading, "source_zone": "navigation" if navigation_page else "body"},
+                        attributes={
+                            "text_extraction_source": "NATIVE",
+                            "ocr_used": False,
+                            "heading_rule_applied": heading,
+                            "source_zone": "navigation" if navigation_page else "body",
+                            **({"glyph_provenance": glyph_provenance} if glyph_provenance else {}),
+                        },
                     )
                 )
             if len(observations) > count_before:
@@ -115,6 +139,9 @@ class PdfTextParser:
                         metadata={"page": page_number},
                     )
                 )
+        unmatched = correction_index.keys() - applied_corrections
+        if unmatched:
+            raise ValueError(f"glyph corrections did not match Poppler blocks: {sorted(unmatched)}")
         if not observations:
             raise ValueError("PDF has no extractable native text; Plain Text ingestion never falls back to OCR")
         for index, signature in header_candidates.items():
@@ -130,6 +157,7 @@ class PdfTextParser:
             attributes={
                 "extraction_backend": "native_text",
                 "ocr_used": False,
+                "verified_glyph_correction_count": len(applied_corrections),
                 "page_count": len(pages),
                 "text_page_count": text_pages,
                 "block_order": "poppler_bbox_layout",
